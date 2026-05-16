@@ -1,0 +1,39 @@
+{
+  "name": "demo-video",
+  "version": "1.0.0",
+  "description": "Tạo video bằng Node.js, FFmpeg và Gommo AI",
+  "main": "src/index.js",
+  "type": "commonjs",
+  "scripts": {
+    "setup": "powershell -ExecutionPolicy Bypass -File ./scripts/setup-node.ps1",
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "start": "node src/index.js",
+    "playground": "node server.js",
+    "demo:images": "node src/index.js from-images --input ./assets/images --output ./output/slideshow.mp4",
+    "demo:text": "node src/index.js add-text --input ./output/slideshow.mp4 --output ./output/with-text.mp4 --text \"Xin chào!\"",
+    "demo:concat": "node src/index.js concat --inputs ./output/part1.mp4,./output/part2.mp4 --output ./output/merged.mp4",
+    "gommo:models": "node src/index.js gommo models -t video",
+    "gommo:video": "node src/index.js gommo video -m happy_horse_1 --prompt \"a cinematic portrait\""
+  },
+  "keywords": [
+    "video",
+    "ffmpeg",
+    "nodejs",
+    "vite",
+    "gommo"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "commander": "^12.1.0",
+    "fluent-ffmpeg": "^2.1.3"
+  },
+  "devDependencies": {
+    "vite": "^6.4.2"
+  }
+}

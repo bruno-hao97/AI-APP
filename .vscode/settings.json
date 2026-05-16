@@ -1,0 +1,6 @@
+{
+  "workbench.colorTheme": "Cursor Dark",
+  "terminal.integrated.env.windows": {
+    "PATH": "${workspaceFolder}\\.tools\\node;${env:PATH}"
+  }
+}

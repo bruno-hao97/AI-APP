@@ -2,93 +2,11 @@
 <html lang="vi">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Cài đặt tài khoản — Studio AI</title>
-  <link rel="stylesheet" href="/css/app.css" />
+  <meta http-equiv="refresh" content="0;url=/#/settings" />
+  <title>Chuyển hướng…</title>
+  <script>location.replace('/#/settings');</script>
 </head>
 <body>
-  <header class="top">
-    <div class="brand">
-      <span class="brand-icon" aria-hidden="true">⚙️</span>
-      <div>
-        <h1>Cài đặt</h1>
-        <p class="brand-sub">Kết nối tài khoản 79AI / Gommo</p>
-      </div>
-    </div>
-    <nav>
-      <a href="/" class="nav-link">← Về Studio AI</a>
-    </nav>
-  </header>
-
-  <main class="settings-main">
-    <section class="panel">
-      <h2>Mã đăng nhập</h2>
-      <p class="lead">
-        Dán mã token bạn nhận từ trang 79AI (hoặc quản trị viên).
-        Mã này giống “chìa khoá” để tạo video/ảnh — không chia sẻ cho người khác.
-      </p>
-
-      <form id="settings-form">
-        <label class="field-block">
-          <span class="field-label">Mã token</span>
-          <span class="field-help">Thường bắt đầu bằng chuỗi dài; dán nguyên văn.</span>
-          <input type="password" id="token" autocomplete="off" placeholder="Dán mã token vào đây" />
-        </label>
-
-        <details class="advanced">
-          <summary>Thiết lập nâng cao (thường không cần đổi)</summary>
-          <label class="field-block">
-            <span class="field-label">Tên miền website</span>
-            <input type="text" id="domain" value="79ai.net" readonly />
-          </label>
-          <label class="field-block">
-            <span class="field-label">Mã dự án</span>
-            <input type="text" id="projectId" value="default" />
-          </label>
-        </details>
-
-        <div class="actions-row">
-          <button type="submit" class="primary">Lưu &amp; sử dụng</button>
-          <button type="button" id="clear" class="secondary">Xóa mã</button>
-        </div>
-      </form>
-
-      <p id="status" class="notice" hidden></p>
-    </section>
-
-    <p class="hint" style="margin-top:1rem;text-align:center;">
-      Sau khi lưu, quay lại <a href="/">Studio AI</a> để bắt đầu tạo nội dung.
-    </p>
-  </main>
-
-  <script type="module">
-    import { loadSettings, saveSettings } from '/js/settings-store.js';
-
-    const statusEl = document.getElementById('status');
-    const s = loadSettings();
-    document.getElementById('token').value = s.accessToken;
-    document.getElementById('domain').value = s.domain;
-    document.getElementById('projectId').value = s.projectId;
-
-    document.getElementById('settings-form').addEventListener('submit', (e) => {
-      e.preventDefault();
-      saveSettings({
-        accessToken: document.getElementById('token').value.trim(),
-        domain: document.getElementById('domain').value.trim() || '79ai.net',
-        projectId: document.getElementById('projectId').value.trim() || 'default',
-      });
-      statusEl.hidden = false;
-      statusEl.className = 'notice';
-      statusEl.innerHTML = '<strong>Đã lưu!</strong> Bạn có thể quay lại Studio AI và tạo video.';
-    });
-
-    document.getElementById('clear').addEventListener('click', () => {
-      document.getElementById('token').value = '';
-      saveSettings({ accessToken: '' });
-      statusEl.hidden = false;
-      statusEl.className = 'notice warn';
-      statusEl.textContent = 'Đã xóa mã token.';
-    });
-  </script>
+  <p><a href="/#/settings">Mở cài đặt</a></p>
 </body>
 </html>

@@ -1,140 +1,55 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="vi" class="dark">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Studio AI — Tạo video &amp; hình ảnh</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0a0a1a" />
+  <meta name="description" content="AI Studio — Nền tảng tạo video, hình ảnh, giọng nói, nhạc AI qua Gommo API" />
+  <title>AI Studio — Nền tảng sáng tạo AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/css/app.css" />
+  <link rel="stylesheet" href="/css/pages.css" />
 </head>
-<body>
-  <header class="top">
-    <div class="brand">
-      <span class="brand-icon" aria-hidden="true">✨</span>
-      <div>
-        <h1>Studio AI</h1>
-        <p class="brand-sub">Tạo video và hình ảnh đơn giản</p>
-      </div>
-    </div>
-    <nav>
-      <a href="/settings.html" class="nav-link">Cài đặt tài khoản</a>
-    </nav>
-  </header>
+<body class="app-shell">
+  <div class="bg-aurora" aria-hidden="true"></div>
+  <div class="bg-glow" aria-hidden="true"></div>
 
-  <div id="bannerNoToken" class="banner warn" hidden>
-    <strong>Chưa đăng nhập API.</strong>
-    Vào <a href="/settings.html">Cài đặt tài khoản</a> để dán mã token Gommo (bạn nhận từ 79AI).
+  <div class="app-main-wrap">
+    <header class="site-header" id="siteHeader">
+      <a href="#/" class="site-logo font-display" id="topbarHome">
+        <span class="site-logo-mark" aria-hidden="true"></span>
+        <span class="site-logo-text">AI STUDIO</span>
+      </a>
+
+      <nav class="site-nav" aria-label="Menu chính">
+        <a href="#/features" class="site-nav-link" data-topnav="/features">Tính năng</a>
+        <a href="#/models" class="site-nav-link" data-topnav="/models">Models</a>
+        <a href="#/docs" class="site-nav-link" data-topnav="/docs">Docs</a>
+        <a href="#/history" class="site-nav-link" data-topnav="/history">Lịch sử</a>
+      </nav>
+
+      <div class="site-header-actions">
+        <span class="header-status warn" id="headerStatus" title="Trạng thái API">Chưa có token</span>
+
+        <div class="feature-menu-wrap site-menu-mobile">
+          <button type="button" class="feature-menu-trigger" id="featureMenuToggle" aria-expanded="false" aria-haspopup="menu" aria-controls="featureMenuPanel">
+            <span id="featureMenuLabel">Menu</span>
+            <span class="feature-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div id="featureMenuBackdrop" class="feature-menu-backdrop" aria-hidden="true"></div>
+          <div id="featureMenuPanel" class="feature-menu-panel" role="menu" aria-label="Tính năng"></div>
+        </div>
+
+        <a href="#/settings" class="site-link-muted">Token API</a>
+        <a href="#/create/image" class="site-cta-btn" id="headerStart">Bắt đầu</a>
+      </div>
+    </header>
+
+    <main class="app-main" id="app-main"></main>
   </div>
 
-  <main class="wizard">
-    <ol class="steps" aria-label="Các bước">
-      <li class="step-item active" data-step="1"><span>1</span> Loại nội dung</li>
-      <li class="step-item" data-step="2"><span>2</span> Chọn công cụ</li>
-      <li class="step-item" data-step="3"><span>3</span> Mô tả &amp; tùy chọn</li>
-      <li class="step-item" data-step="4"><span>4</span> Kết quả</li>
-    </ol>
-
-    <!-- Bước 1 -->
-    <section class="panel step-panel" id="step1">
-      <h2>Bạn muốn tạo gì?</h2>
-      <p class="lead">Chọn một loại — mỗi loại có danh sách công cụ AI riêng.</p>
-      <div id="typeCards" class="card-grid"></div>
-    </section>
-
-    <!-- Bước 2 -->
-    <section class="panel step-panel" id="step2" hidden>
-      <div class="panel-head">
-        <div>
-          <h2>Chọn công cụ AI</h2>
-          <p class="lead" id="step2Subtitle">Đang tải danh sách…</p>
-        </div>
-        <button type="button" class="secondary" id="btnBack1">← Quay lại</button>
-      </div>
-      <div id="modelLoading" class="loading" hidden>Đang tải công cụ…</div>
-      <div id="modelCards" class="card-grid model-grid"></div>
-      <p id="modelEmpty" class="hint" hidden>Không có công cụ khả dụng. Thử loại nội dung khác.</p>
-    </section>
-
-    <!-- Bước 3 -->
-    <section class="panel step-panel" id="step3" hidden>
-      <div class="panel-head">
-        <div>
-          <h2 id="selectedModelTitle">Thiết lập nội dung</h2>
-          <p class="lead" id="selectedModelHint"></p>
-        </div>
-        <button type="button" class="secondary" id="btnBack2">← Chọn công cụ khác</button>
-      </div>
-
-      <div id="modelNotice" class="notice" hidden></div>
-
-      <label id="promptWrap" class="field-block">
-        <span class="field-label">Mô tả nội dung <em>*</em></span>
-        <span class="field-help">Viết bằng tiếng Việt hoặc Anh — mô tả càng rõ, kết quả càng đúng ý.</span>
-        <textarea id="prompt" rows="4" placeholder="Ví dụ: Cô gái đi bộ trên bãi biển lúc hoàng hôn, camera chậm, phong cách điện ảnh"></textarea>
-      </label>
-
-      <label id="textWrap" class="field-block" hidden>
-        <span class="field-label">Văn bản cần đọc <em>*</em></span>
-        <textarea id="text" rows="4" placeholder="Nhập đoạn văn bản…"></textarea>
-      </label>
-
-      <label id="musicNameWrap" class="field-block" hidden>
-        <span class="field-label">Tên bài (tuỳ chọn)</span>
-        <input type="text" id="musicName" placeholder="Ví dụ: Nhạc nền vui tươi" />
-      </label>
-
-      <div id="dynamicFields" class="options-grid"></div>
-
-      <div id="mediaUrls" class="media-section" hidden>
-        <h3 class="subsection">Ảnh đính kèm (link)</h3>
-        <p class="field-help">Dán link ảnh đã upload (jpg/png). Nếu chưa có, upload trên 79AI trước rồi copy link.</p>
-        <div id="urlInputs"></div>
-      </div>
-
-      <p id="estPrice" class="price-box" hidden></p>
-
-      <details class="advanced">
-        <summary>Tùy chọn nâng cao (dành cho kỹ thuật)</summary>
-        <pre id="modelDetail" class="log compact"></pre>
-      </details>
-
-      <button type="button" id="createJob" class="primary large">
-        Bắt đầu tạo
-      </button>
-    </section>
-
-    <!-- Bước 4 -->
-    <section class="panel step-panel" id="step4" hidden>
-      <h2>Kết quả</h2>
-      <div id="progressWrap" class="progress-wrap" hidden>
-        <div class="progress-bar"><div id="progressBar" class="progress-bar-fill"></div></div>
-        <p id="progress" class="progress-text">Đang gửi yêu cầu…</p>
-      </div>
-
-      <div id="result" class="result-box" hidden>
-        <p class="result-success">🎉 Xong! Xem hoặc tải file bên dưới.</p>
-        <div class="result-actions">
-          <a id="resultLink" class="btn-download" href="#" target="_blank" rel="noopener">Mở trong tab mới</a>
-          <button type="button" id="btnDownload" class="btn-download secondary-style">Tải xuống máy</button>
-        </div>
-        <p id="downloadHint" class="field-help" hidden>Mẹo: Nếu tải không chạy, chuột phải vào ảnh/video phía dưới → Lưu hình / Lưu video.</p>
-        <video id="resultVideo" controls playsinline crossorigin="anonymous"></video>
-        <img id="resultImage" alt="Kết quả" crossorigin="anonymous" />
-      </div>
-
-      <div id="resultError" class="notice error" hidden></div>
-
-      <details id="techLogWrap" class="advanced" hidden>
-        <summary>Chi tiết kỹ thuật (cho dev)</summary>
-        <pre id="log" class="log"></pre>
-      </details>
-
-      <div class="actions-row">
-        <button type="button" class="primary" id="btnNew">Tạo bản mới</button>
-        <button type="button" class="secondary" id="btnBackEdit">← Sửa &amp; tạo lại</button>
-      </div>
-    </section>
-  </main>
-
-  <script type="module" src="/js/playground.js"></script>
+  <script type="module" src="/js/app.js"></script>
 </body>
 </html>

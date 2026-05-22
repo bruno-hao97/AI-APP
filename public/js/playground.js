@@ -1,5 +1,6 @@
 import { GommoClient } from './gommo-client.js';
-import { loadSettings, hasToken } from './settings-store.js';
+import { loadSettings, hasToken, saveSettings } from './settings-store.js';
+import { addHistoryEntry } from './history-store.js';
 import {
   modelSlug,
   analyzeModel,
@@ -455,7 +456,24 @@ function selectModel(m) {
   setStep(3);
 }
 
+function updateTokenUI() {
+  const banner = $('bannerNoToken');
+  const ok = hasToken();
+  if (banner) banner.hidden = ok;
+}
+
 async function loadModelsAndGoStep2() {
+  if (!hasToken()) {
+    updateTokenUI();
+    $('tokenQuick')?.focus();
+    $('tokenQuickStatus').hidden = false;
+    $('tokenQuickStatus').textContent =
+      'Cần mã token trước — dán vào khung phía trên rồi bấm Lưu & kết nối.';
+    setStep(1);
+    $('bannerNoToken')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    return;
+  }
+  $('tokenQuickStatus').hidden = true;
   setStep(2);
   $('modelLoading').hidden = false;
   $('modelCards').innerHTML = '';
@@ -579,24 +597,91 @@ function showResult(url) {
   video.src = isImage ? '' : url;
   img.src = isImage ? url : '';
   box.hidden = false;
+
+  if (url) {
+    const sel = collectSelections();
+    addHistoryEntry({
+      type: currentType,
+      resultUrl: url,
+      prompt: sel.prompt || sel.text || sel.name || '',
+      modelName: currentModel?.name || '',
+      modelSlug: currentSchema?.slug || (currentModel ? modelSlug(currentModel) : ''),
+      meta: {
+        ratio: sel.ratio || '',
+        mode: sel.mode || '',
+        resolution: sel.resolution || '',
+        duration: sel.duration || '',
+      },
+    });
+  }
 }
 
-$('btnBack1')?.addEventListener('click', () => setStep(1));
-$('btnBack2')?.addEventListener('click', () => setStep(2));
-$('btnBackEdit')?.addEventListener('click', () => setStep(3));
-$('btnNew')?.addEventListener('click', () => {
-  setStep(1);
-  currentModel = null;
-  currentSchema = null;
-});
-$('createJob')?.addEventListener('click', runCreate);
-$('btnDownload')?.addEventListener('click', () => {
-  if (lastResultUrl) void downloadResult(lastResultUrl);
-});
+function bindStudioEvents() {
+  $('btnBack1')?.addEventListener('click', () => setStep(1));
+  $('btnBack2')?.addEventListener('click', () => setStep(2));
+  $('btnBackEdit')?.addEventListener('click', () => setStep(3));
+  $('btnNew')?.addEventListener('click', () => {
+    setStep(1);
+    currentModel = null;
+    currentSchema = null;
+  });
+  $('createJob')?.addEventListener('click', runCreate);
+  $('btnDownload')?.addEventListener('click', () => {
+    if (lastResultUrl) void downloadResult(lastResultUrl);
+  });
 
-if (!hasToken()) {
-  $('bannerNoToken').hidden = false;
-} else {
+  $('tokenQuickForm')?.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const token = $('tokenQuick')?.value.trim() || '';
+    if (!token) {
+      $('tokenQuickStatus').hidden = false;
+      $('tokenQuickStatus').textContent = 'Vui lòng dán mã token.';
+      return;
+    }
+    saveSettings({ accessToken: token });
+    updateTokenUI();
+    document.dispatchEvent(new CustomEvent('settings:saved'));
+    $('tokenQuickStatus').hidden = false;
+    $('tokenQuickStatus').textContent = 'Đã lưu! Chọn loại nội dung để tiếp tục.';
+  });
+}
+
+function bindStudioGlobal() {
+  if (globalEventsBound) return;
+  globalEventsBound = true;
+  document.addEventListener('studio:route', (e) => {
+    const type = e.detail?.type;
+    if (!type || !JOB_TYPES.some((t) => t.value === type)) return;
+    currentType = type;
+    if ($('typeCards')) initTypeCards();
+    void loadModelsAndGoStep2();
+  });
+}
+
+let studioReady = false;
+let globalEventsBound = false;
+
+/** Khởi tạo studio wizard — gọi sau khi DOM studio được inject */
+export function initStudio({ remount = false } = {}) {
+  bindStudioGlobal();
+  if (remount) studioReady = false;
+  if (studioReady) return;
+  studioReady = true;
+  bindStudioEvents();
+  bootStudio();
+}
+
+function bootStudio() {
   initTypeCards();
   setStep(1);
+  updateTokenUI();
+  if (!hasToken()) $('tokenQuick')?.focus();
+
+  const startType = window.__studioStartType;
+  if (startType && JOB_TYPES.some((t) => t.value === startType)) {
+    currentType = startType;
+    initTypeCards();
+    void loadModelsAndGoStep2();
+    delete window.__studioStartType;
+  }
 }

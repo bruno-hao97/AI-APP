@@ -3,13 +3,15 @@ import { JOB_TYPES } from '../ui-labels.js';
 import { HERO_CHIPS, SITE } from '../site-content.js';
 import { hasToken } from '../settings-store.js';
 import { countHistoryGrouped } from '../history-store.js';
+import { buildPageShell, bindPageShell, buildQuickNav, defaultPageActions } from '../page-shell.js';
 
 export function renderDashboard({ main }) {
   const connected = hasToken();
   const hist = countHistoryGrouped();
   const totalHist = Object.values(hist).reduce((a, b) => a + b, 0);
 
-  main.innerHTML = `
+  const body = `
+    <div class="page-body-inner is-fluid">
     <div class="view-dashboard landing">
       <section class="landing-hero">
         <span class="landing-badge">AI Content Operating System</span>
@@ -123,7 +125,19 @@ export function renderDashboard({ main }) {
           : ''
       }
     </div>
-  `;
+    </div>`;
+
+  main.innerHTML = buildPageShell({
+    kicker: 'Trang chủ',
+    title: 'AI Studio',
+    lead: SITE.tagline,
+    backTo: null,
+    subBar: buildQuickNav('/'),
+    actions: defaultPageActions({ showStudio: true }),
+    bodyClass: 'is-fluid',
+    content: body,
+  });
+  bindPageShell(main);
 
   const heroPrompt = main.querySelector('#heroPrompt');
 

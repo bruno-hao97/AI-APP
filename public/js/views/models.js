@@ -3,6 +3,7 @@ import { loadSettings, hasToken } from '../settings-store.js';
 import { modelSlug, isModelAvailable } from '../model-schema.js';
 import { JOB_TYPES, formatPrice, getModelCategory } from '../ui-labels.js';
 import { navigate } from '../router.js';
+import { buildPageShell, bindPageShell, buildQuickNav, defaultPageActions } from '../page-shell.js';
 
 function escapeHtml(s) {
   return String(s ?? '')
@@ -11,39 +12,57 @@ function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
+function buildTypeTabs(activeType) {
+  return `
+    <div class="page-segment-tabs" role="tablist">
+      ${JOB_TYPES.map(
+        (t) => `
+        <button type="button" class="page-sub-link${activeType === t.value ? ' active' : ''}" data-model-type="${t.value}" role="tab">
+          ${t.icon} ${t.label}
+        </button>`
+      ).join('')}
+    </div>`;
+}
+
 /** @param {{ main: HTMLElement, params?: { type?: string } }} ctx */
 export function renderModels({ main, params = {} }) {
   const activeType = params.type || JOB_TYPES[0].value;
+  const path = `/models/${activeType}`;
 
-  main.innerHTML = `
-    <div class="view-page view-models">
-      <header class="page-hero-sm">
-        <p class="page-kicker">Catalog</p>
-        <h1 class="hero-gradient font-display">Danh sách Model</h1>
-        <p class="page-lead center">Model AI theo từng loại nội dung — lấy trực tiếp từ API Gommo khi đã kết nối token.</p>
-      </header>
+  const content = `
+    <div class="page-body-inner is-wide">
+      <div class="view-page view-models">
+        <p class="hint"><a href="#/matrix" class="inline-link" id="modelsGoMatrix">Mở Model Matrix →</a> xem toàn bộ model &amp; dry-run</p>
 
-      <div class="model-page-tabs" role="tablist">
-        ${JOB_TYPES.map(
-          (t) => `
-          <button type="button" class="pg-tab${activeType === t.value ? ' active' : ''}" data-type="${t.value}">
-            ${t.icon} ${t.label}
-          </button>`
-        ).join('')}
+        <div id="modelsTokenWarn" class="banner warn" ${hasToken() ? 'hidden' : ''}>
+          <strong>Chưa có token.</strong> Vào <a href="#/settings">Cài đặt API</a> để tải danh sách model thật.
+        </div>
+
+        <div id="modelsLoading" class="loading" hidden>Đang tải model…</div>
+        <div id="modelsError" class="notice error" hidden></div>
+        <div id="modelsGrid" class="models-catalog-grid"></div>
       </div>
+    </div>`;
 
-      <div id="modelsTokenWarn" class="banner warn" ${hasToken() ? 'hidden' : ''}>
-        <strong>Chưa có token.</strong> Vào <a href="#/settings">Cài đặt API</a> để tải danh sách model thật.
-      </div>
+  main.innerHTML = buildPageShell({
+    kicker: 'Catalog',
+    title: 'Danh sách Model',
+    lead: 'Model AI theo từng loại nội dung — từ API Gommo khi đã kết nối token.',
+    backTo: '/',
+    subBar: `${buildQuickNav(path)}${buildTypeTabs(activeType)}`,
+    actions: defaultPageActions(),
+    content,
+  });
 
-      <div id="modelsLoading" class="loading" hidden>Đang tải model…</div>
-      <div id="modelsError" class="notice error" hidden></div>
-      <div id="modelsGrid" class="models-catalog-grid"></div>
-    </div>
-  `;
+  bindPageShell(main);
 
-  main.querySelectorAll('[data-type]').forEach((tab) => {
-    tab.addEventListener('click', () => navigate(`/models/${tab.dataset.type}`));
+  main.querySelector('#modelsGoMatrix')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    navigate('/matrix');
+  });
+
+  main.querySelectorAll('[data-model-type]').forEach((tab) => {
+    tab.addEventListener('click', () => navigate(`/models/${tab.dataset.modelType}`));
   });
 
   if (hasToken()) void loadModelsCatalog(main, activeType);
@@ -84,7 +103,10 @@ async function loadModelsCatalog(main, type) {
       .join('');
 
     grid.querySelectorAll('[data-use]').forEach((btn) => {
-      btn.addEventListener('click', () => navigate(`/create/${btn.dataset.use}`));
+      btn.addEventListener('click', () => {
+        const slug = encodeURIComponent(btn.dataset.slug || '');
+        navigate(`/create/${btn.dataset.use}?model=${slug}`);
+      });
     });
   } catch (e) {
     errEl.hidden = false;

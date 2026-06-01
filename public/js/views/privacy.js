@@ -1,24 +1,32 @@
 import { PRIVACY_SECTIONS, SITE } from '../site-content.js';
+import { buildPageShell, bindPageShell, buildQuickNav, defaultPageActions } from '../page-shell.js';
 
 export function renderPrivacy({ main }) {
-  main.innerHTML = `
-    <div class="view-page view-privacy">
-      <header class="page-hero-sm">
-        <p class="page-kicker">Pháp lý</p>
-        <h1 class="hero-gradient font-display">Chính sách quyền riêng tư</h1>
-        <p class="page-lead center">Cập nhật cho ${SITE.name} — bản demo SPA chạy trên trình duyệt.</p>
-      </header>
+  const content = `
+    <div class="page-body-inner">
+      <div class="view-page view-privacy">
+        <article class="panel legal-doc">
+          ${PRIVACY_SECTIONS.map(
+            (s) => `
+            <section class="legal-section">
+              <h2 class="font-display">${s.title}</h2>
+              <p>${s.text}</p>
+            </section>`
+          ).join('')}
+          <p class="legal-foot hint">Nếu triển khai production, cần bổ sung policy theo quy định pháp luật và nhà cung cấp API.</p>
+        </article>
+      </div>
+    </div>`;
 
-      <article class="panel legal-doc">
-        ${PRIVACY_SECTIONS.map(
-          (s) => `
-          <section class="legal-section">
-            <h2 class="font-display">${s.title}</h2>
-            <p>${s.text}</p>
-          </section>`
-        ).join('')}
-        <p class="legal-foot hint">Nếu triển khai production, cần bổ sung policy theo quy định pháp luật và nhà cung cấp API.</p>
-      </article>
-    </div>
-  `;
+  main.innerHTML = buildPageShell({
+    kicker: 'Pháp lý',
+    title: 'Quyền riêng tư',
+    lead: `Cập nhật cho ${SITE.name} — SPA chạy trên trình duyệt.`,
+    backTo: '/',
+    subBar: buildQuickNav('/privacy'),
+    actions: defaultPageActions(),
+    content,
+  });
+
+  bindPageShell(main);
 }

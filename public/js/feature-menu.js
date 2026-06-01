@@ -8,6 +8,7 @@ export const FEATURE_MENU_GROUPS = [
       { id: 'dash', label: 'Dashboard', icon: '◫', path: '/', accent: 'home' },
       { id: 'feat', label: 'Tính năng', icon: '✦', path: '/features', accent: 'features' },
       { id: 'models', label: 'Danh sách Model', icon: '⬡', path: '/models', accent: 'models' },
+      { id: 'matrix', label: 'Model Matrix', icon: '▦', path: '/matrix', accent: 'matrix' },
     ],
   },
   {
@@ -48,6 +49,7 @@ const ROUTE_LABELS = {
   '/': 'Dashboard',
   '/features': 'Tính năng',
   '/models': 'Models',
+  '/matrix': 'Model Matrix',
   '/docs': 'Tài liệu',
   '/support': 'Support',
   '/privacy': 'Privacy',

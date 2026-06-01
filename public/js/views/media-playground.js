@@ -19,6 +19,21 @@ import {
   progressMessage,
 } from '../ui-labels.js';
 import { navigate } from '../router.js';
+import { inferProvider } from '../model-catalog.js';
+import {
+  CREATE_TITLES,
+  setGalleryTab,
+  getGalleryTab,
+  resetSession,
+  addLoadingSession,
+  finishLoadingSession,
+  removeLoadingSession,
+  renderGalleryBody,
+  bindGalleryEvents,
+  refreshGallery,
+  setGalleryReuseHandler,
+} from '../studio-gallery.js';
+import { renderUploadGroup, bindStudioUploads } from '../studio-upload.js';
 
 const API_BASE = 'https://v2.api.gommo.net';
 const PLAYGROUND_TYPES = new Set(JOB_TYPES.map((t) => t.value));
@@ -29,8 +44,22 @@ let currentModel = null;
 let schema = null;
 let lastResultUrl = null;
 let escapeBound = false;
+let clickBound = false;
+let preferredModelSlug = '';
 
 const $ = (id) => document.getElementById(id);
+
+function showPgError(message) {
+  const el = $('pgError');
+  if (!el) return;
+  if (message) {
+    el.hidden = false;
+    el.textContent = message;
+  } else {
+    el.hidden = true;
+    el.textContent = '';
+  }
+}
 
 function typeMeta(type = jobType) {
   return JOB_TYPES.find((t) => t.value === type) || JOB_TYPES[0];
@@ -67,30 +96,27 @@ function setResponse(label, data) {
 
 function setRequestPreview(modelId, payload) {
   const url = `${API_BASE}/ai/jobs/${jobType}/${modelId}`;
-  $('pgRequestUrl').textContent = url;
-  $('pgRequestBody').textContent = JSON.stringify(payload, null, 2);
+  const sub = $('pgRequestUrlSub');
+  if (sub) sub.textContent = url;
+  const body = $('pgRequestBody');
+  if (body) body.textContent = JSON.stringify(payload, null, 2);
   const s = loadSettings();
-  $('pgAuthInfo').textContent = JSON.stringify(
-    {
-      domain: s.domain,
-      project_id: s.projectId,
-      access_token: s.accessToken ? `${s.accessToken.slice(0, 8)}…` : '(chưa có)',
-    },
-    null,
-    2
-  );
+  const auth = $('pgAuthInfo');
+  if (auth) {
+    auth.textContent = JSON.stringify(
+      {
+        domain: s.domain,
+        project_id: s.projectId,
+        access_token: s.accessToken ? `${s.accessToken.slice(0, 8)}…` : '(chưa có)',
+      },
+      null,
+      2
+    );
+  }
 }
 
-function inferProvider(model) {
-  const name = (model.name || modelSlug(model)).toUpperCase();
-  if (name.includes('GPT') || name.includes('OPENAI')) return 'OPENAI';
-  if (name.includes('FLUX')) return 'FLUX';
-  if (name.includes('GEMINI') || name.includes('GOOGLE') || name.includes('VEO')) return 'GOOGLE';
-  if (name.includes('MIDJOURNEY') || name.includes('MJ')) return 'MIDJOURNEY';
-  if (name.includes('KLING')) return 'KLING';
-  if (name.includes('GROK')) return 'GROK';
-  if (name.includes('SUNO')) return 'SUNO';
-  return 'KHÁC';
+function providerTag(model) {
+  return inferProvider({ raw: model, slug: modelSlug(model) });
 }
 
 function renderModelList(filter = '') {
@@ -107,7 +133,7 @@ function renderModelList(filter = '') {
 
   const groups = new Map();
   available.forEach((m) => {
-    const g = inferProvider(m);
+    const g = providerTag(m);
     if (!groups.has(g)) groups.set(g, []);
     groups.get(g).push(m);
   });
@@ -146,7 +172,7 @@ function renderModelList(filter = '') {
 function renderProviderTabs() {
   const tabs = $('pgProviderTabs');
   if (!tabs) return;
-  const providers = ['TẤT CẢ', ...new Set(models.filter(isModelAvailable).map(inferProvider))];
+  const providers = ['TẤT CẢ', ...new Set(models.filter(isModelAvailable).map(providerTag))];
   tabs.innerHTML = providers
     .map(
       (p, i) =>
@@ -237,48 +263,59 @@ function renderParamsForm() {
     });
   });
 
-  const refs = $('pgRefs');
-  if (fields.references && limits.maxReference > 0 && refs) {
-    refs.hidden = false;
-    refs.innerHTML = Array.from(
-      { length: limits.maxReference },
-      (_, i) => `
-      <label class="field-block">
-        <span class="field-label">${FIELD_LABELS.references} ${limits.maxReference > 1 ? i + 1 : ''}</span>
-        <input type="url" data-ref="${i}" placeholder="https://…" />
-      </label>`
-    ).join('');
-  } else if (refs) refs.hidden = true;
+  const refZone = $('studioRefZone');
+  const hasUploads =
+    (fields.references && limits.maxReference > 0) ||
+    (fields.subjects && limits.maxSubject > 0) ||
+    fields.startFrame;
 
-  const subs = $('pgSubjects');
-  if (fields.subjects && limits.maxSubject > 0 && subs) {
-    subs.hidden = false;
-    subs.innerHTML = Array.from(
-      { length: limits.maxSubject },
-      (_, i) => `
-      <label class="field-block">
-        <span class="field-label">${FIELD_LABELS.subjects} ${limits.maxSubject > 1 ? i + 1 : ''}</span>
-        <input type="url" data-sub="${i}" placeholder="https://…" />
-      </label>`
-    ).join('');
-  } else if (subs) subs.hidden = true;
+  if (refZone) {
+    refZone.hidden = !hasUploads;
+    const hint = refZone.querySelector('.studio-ref-hint');
+    if (hint) {
+      hint.textContent = hasUploads
+        ? 'ẢNH THAM CHIẾU — Nhấp / Kéo thả / Dán ảnh (upload lên Gommo)'
+        : '';
+    }
+  }
 
-  const imgs = $('pgImages');
-  if (fields.startFrame && imgs) {
-    imgs.hidden = false;
-    const n = schema.fields.endFrame ? 2 : 1;
-    imgs.innerHTML = Array.from(
-      { length: n },
-      (_, i) => `
-      <label class="field-block">
-        <span class="field-label">${FIELD_LABELS.images} ${n > 1 ? (i === 0 ? '(đầu)' : '(cuối)') : ''}</span>
-        <input type="url" data-start="${i}" placeholder="https://…" />
-      </label>`
-    ).join('');
-  } else if (imgs) imgs.hidden = true;
+  renderUploadGroup($('pgRefs'), {
+    dataAttr: 'data-ref',
+    count: fields.references ? limits.maxReference : 0,
+    groupLabel: FIELD_LABELS.references,
+    itemLabel: (i) =>
+      limits.maxReference > 1 ? `${FIELD_LABELS.references} ${i + 1}` : FIELD_LABELS.references,
+  });
+
+  renderUploadGroup($('pgSubjects'), {
+    dataAttr: 'data-sub',
+    count: fields.subjects ? limits.maxSubject : 0,
+    groupLabel: FIELD_LABELS.subjects,
+    itemLabel: (i) =>
+      limits.maxSubject > 1 ? `${FIELD_LABELS.subjects} ${i + 1}` : FIELD_LABELS.subjects,
+  });
+
+  const frameCount = fields.startFrame ? (schema.fields.endFrame ? 2 : 1) : 0;
+  renderUploadGroup($('pgImages'), {
+    dataAttr: 'data-start',
+    count: frameCount,
+    groupLabel: FIELD_LABELS.images,
+    itemLabel: (i) => (frameCount > 1 ? (i === 0 ? 'Khung đầu' : 'Khung cuối') : FIELD_LABELS.images),
+  });
+
+  bindStudioUploadZone();
 
   updateInputVisibility();
   updatePrice();
+}
+
+function bindStudioUploadZone() {
+  const zone = $('studioRefZone');
+  if (!zone) return;
+  bindStudioUploads(zone, {
+    hasToken,
+    uploadFn: (file) => client().uploadImage(file),
+  });
 }
 
 function updatePrice() {
@@ -301,6 +338,9 @@ function updatePrice() {
   el.textContent = p != null ? formatPrice(p, currentModel?.sale) : '—';
 }
 
+let typePickerOpen = false;
+let activeLoadingId = null;
+
 function closeModelPicker() {
   $('pgModelPicker')?.classList.remove('is-open');
   $('pgModelBackdrop')?.classList.remove('is-open');
@@ -309,6 +349,7 @@ function closeModelPicker() {
 }
 
 function openModelPicker() {
+  closeTypePicker();
   $('pgModelPicker')?.classList.add('is-open');
   $('pgModelBackdrop')?.classList.add('is-open');
   $('pgModelToggle')?.classList.add('is-open');
@@ -322,6 +363,99 @@ function toggleModelPicker(e) {
   else openModelPicker();
 }
 
+function closeTypePicker() {
+  typePickerOpen = false;
+  $('pgTypePanel')?.classList.remove('is-open');
+  $('pgTypeToggle')?.classList.remove('is-open');
+  $('pgTypeToggle')?.setAttribute('aria-expanded', 'false');
+}
+
+function openTypePicker() {
+  closeModelPicker();
+  typePickerOpen = true;
+  $('pgTypePanel')?.classList.add('is-open');
+  $('pgTypeToggle')?.classList.add('is-open');
+  $('pgTypeToggle')?.setAttribute('aria-expanded', 'true');
+}
+
+function toggleTypePicker(e) {
+  e?.stopPropagation();
+  if (typePickerOpen) closeTypePicker();
+  else openTypePicker();
+}
+
+function renderTypePanel() {
+  const panel = $('pgTypePanel');
+  if (!panel) return;
+  panel.innerHTML = `
+    <p class="pg-picker-group-label">TẠO AI</p>
+    ${JOB_TYPES.map(
+      (t) => `
+      <button type="button" class="pg-type-row${t.value === jobType ? ' active' : ''}" data-pick-type="${t.value}">
+        <span class="pg-type-row-icon">${t.icon}</span>
+        <span class="pg-type-row-label">${escapeHtml(t.label)}</span>
+      </button>`
+    ).join('')}
+  `;
+  panel.querySelectorAll('[data-pick-type]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      closeTypePicker();
+      const slug = currentModel ? modelSlug(currentModel) : preferredModelSlug;
+      const q = slug ? `?model=${encodeURIComponent(slug)}` : '';
+      if (btn.dataset.pickType !== jobType) navigate(`/create/${btn.dataset.pickType}${q}`);
+    });
+  });
+}
+
+function syncTypeTrigger() {
+  const t = typeMeta();
+  const icon = $('pgTypeIcon');
+  const label = $('pgTypeLabel');
+  if (icon) icon.textContent = t.icon;
+  if (label) label.textContent = t.label;
+}
+
+function applyHistoryEntry(entry) {
+  if (entry.prompt && $('pgPrompt')) $('pgPrompt').value = entry.prompt;
+  if (entry.prompt && $('pgText')) $('pgText').value = entry.prompt;
+  if (entry.modelSlug && models.some((m) => modelSlug(m) === entry.modelSlug)) {
+    selectModel(entry.modelSlug);
+  }
+  const meta = entry.meta || {};
+  ['mode', 'resolution', 'ratio', 'duration'].forEach((f) => {
+    const val = meta[f];
+    if (!val) return;
+    document.querySelectorAll(`.chip[data-field="${f}"]`).forEach((c) => {
+      c.classList.toggle('active', c.dataset.value === val);
+    });
+  });
+  updatePrice();
+  setGalleryTab('current');
+  refreshStudioGallery();
+}
+
+function refreshStudioGallery() {
+  renderGalleryBody(jobType);
+  if (getGalleryTab() === 'api' && currentModel && schema) {
+    updateModelMetaPanel();
+    try {
+      const sel = collectSelections();
+      const { payload } = buildJobPayload(currentModel, jobType, sel, loadSettings());
+      setRequestPreview(schema.slug, payload);
+    } catch {
+      /* form chưa đủ */
+    }
+  }
+  const shell = document.querySelector('.studio-shell');
+  if (shell) {
+    bindGalleryEvents(shell, {
+      jobType,
+      onReuse: applyHistoryEntry,
+      onRefresh: refreshStudioGallery,
+    });
+  }
+}
+
 function selectModel(slug) {
   const m = models.find((x) => modelSlug(x) === slug);
   if (!m) return;
@@ -330,17 +464,19 @@ function selectModel(slug) {
   const cat = getModelCategory(m);
 
   closeModelPicker();
-  $('pgModelName').textContent = m.name || slug;
-  $('pgModelSlug').textContent = slug;
-  $('pgModelDesc').textContent = m.description || cat.hint;
-  $('pgModelBadge').textContent = formatPrice(m.price, m.sale) || '—';
+  const nameEl = $('pgModelName');
+  if (nameEl) nameEl.textContent = m.name || slug;
 
   const notice = m.notices?.select || m.notices?.select1;
   const noticeEl = $('pgNotice');
-  if (notice?.message) {
-    noticeEl.hidden = false;
-    noticeEl.innerHTML = `<strong>${escapeHtml(notice.title || 'Lưu ý')}</strong><p>${escapeHtml(notice.message)}</p>`;
-  } else noticeEl.hidden = true;
+  if (noticeEl) {
+    if (notice?.message) {
+      noticeEl.hidden = false;
+      noticeEl.innerHTML = `<strong>${escapeHtml(notice.title || 'Lưu ý')}</strong><p>${escapeHtml(notice.message)}</p>`;
+    } else {
+      noticeEl.hidden = true;
+    }
+  }
 
   renderModelList($('pgModelSearch')?.value || '');
   renderParamsForm();
@@ -354,6 +490,37 @@ function selectModel(slug) {
     });
   });
   updatePrice();
+  updateModelMetaPanel();
+  if (getGalleryTab() === 'library') refreshStudioGallery();
+}
+
+function updateModelMetaPanel() {
+  if (!currentModel || !schema) return;
+  const slug = schema.slug;
+  const metaId = $('pgMetaId');
+  const metaServer = $('pgMetaServer');
+  const metaPrice = $('pgMetaPrice');
+  const metaType = $('pgMetaType');
+  if (metaId) metaId.textContent = slug;
+  if (metaServer) metaServer.textContent = providerTag(currentModel);
+  if (metaPrice) metaPrice.textContent = formatPrice(currentModel.price, currentModel.sale) || '—';
+  if (metaType) metaType.textContent = jobType;
+  const schemaEl = $('pgSchemaJson');
+  if (schemaEl) schemaEl.textContent = JSON.stringify(schema, null, 2);
+}
+
+function refreshAuthPanel() {
+  const s = loadSettings();
+  const d = $('pgDomain');
+  const p = $('pgProjectId');
+  if (d) d.value = s.domain || '79ai.net';
+  if (p) p.value = s.projectId || 'default';
+  const tok = $('pgTokenDisplay');
+  if (tok) {
+    tok.textContent = s.accessToken
+      ? `${s.accessToken.slice(0, 12)}…${s.accessToken.slice(-4)}`
+      : '(chưa có token)';
+  }
 }
 
 function collectSelections() {
@@ -382,51 +549,24 @@ function collectSelections() {
 }
 
 function hideAllPreviewMedia() {
-  $('pgPreviewImg').hidden = true;
-  $('pgPreviewVideo').hidden = true;
-  $('pgPreviewAudio').hidden = true;
-  $('pgPreviewFile').hidden = true;
+  const img = $('pgPreviewImg');
+  const vid = $('pgPreviewVideo');
+  const aud = $('pgPreviewAudio');
+  const file = $('pgPreviewFile');
+  if (img) img.hidden = true;
+  if (vid) vid.hidden = true;
+  if (aud) aud.hidden = true;
+  if (file) file.hidden = true;
 }
 
 function setPreviewState(state, { url, message } = {}) {
-  const meta = typeMeta();
-  $('pgPreviewEmpty').hidden = state !== 'empty';
-  $('pgPreviewLoading').hidden = state !== 'loading';
-  $('pgPreviewResult').hidden = state !== 'result';
-
-  if (state === 'empty') {
-    $('pgPreviewIcon').textContent = meta.icon;
+  if (state === 'result' && url) lastResultUrl = url;
+  if (state === 'loading' && activeLoadingId) {
+    const item = document.querySelector(`[data-entry-id="${activeLoadingId}"]`);
+    const p = item?.querySelector('.sg-card-loading p');
+    if (p && message) p.textContent = message;
   }
-
-  if (state === 'loading') {
-    const t = $('pgPreviewLoadingText');
-    if (t) t.textContent = message || 'Đang xử lý…';
-  }
-
-  if (state === 'result' && url) {
-    lastResultUrl = url;
-    $('pgResultLink').href = url;
-    hideAllPreviewMedia();
-
-    const kind = detectPreviewKind(url);
-    if (kind === 'image') {
-      const img = $('pgPreviewImg');
-      img.src = url;
-      img.hidden = false;
-    } else if (kind === 'video') {
-      const vid = $('pgPreviewVideo');
-      vid.src = url;
-      vid.hidden = false;
-    } else if (kind === 'audio') {
-      const aud = $('pgPreviewAudio');
-      aud.src = url;
-      aud.hidden = false;
-    } else {
-      $('pgPreviewFile').hidden = false;
-      $('pgPreviewFileLink').href = url;
-      $('pgPreviewFileLink').textContent = url.split('/').pop()?.split('?')[0] || 'Tải file';
-    }
-  }
+  if (state === 'result' || state === 'empty') refreshStudioGallery();
 }
 
 async function downloadResult(url) {
@@ -445,24 +585,31 @@ async function downloadResult(url) {
 
 function recordHistory(url) {
   const sel = collectSelections();
+  const meta = {
+    mode: sel.mode || '',
+    resolution: sel.resolution || '',
+    ratio: sel.ratio || '',
+    duration: sel.duration || '',
+  };
+  if (activeLoadingId) {
+    finishLoadingSession(activeLoadingId, url);
+    activeLoadingId = null;
+  }
   addHistoryEntry({
     type: jobType,
     resultUrl: url,
     prompt: sel.prompt || sel.text || sel.name || '',
     modelName: currentModel?.name || '',
     modelSlug: schema?.slug || '',
-    meta: {
-      mode: sel.mode || '',
-      resolution: sel.resolution || '',
-      ratio: sel.ratio || '',
-      duration: sel.duration || '',
-    },
+    meta,
   });
+  refreshStudioGallery();
 }
 
 async function runCreate() {
   if (!currentModel || !schema) return;
-  $('pgError').hidden = true;
+  const errEl = $('pgError');
+  if (errEl) errEl.hidden = true;
 
   let payload;
   try {
@@ -470,15 +617,30 @@ async function runCreate() {
     if (jobType === 'music' && !sel.name) sel.name = 'Bản nhạc';
     ({ payload } = buildJobPayload(currentModel, jobType, sel, loadSettings()));
   } catch (e) {
-    $('pgError').hidden = false;
-    $('pgError').textContent = e.message;
+    if (errEl) {
+      errEl.hidden = false;
+      errEl.textContent = e.message;
+    }
     return;
   }
 
   const modelId = schema.slug;
   setRequestPreview(modelId, payload);
-  setPreviewState('loading', { message: 'Đang gửi request…' });
-  $('pgSubmit').disabled = true;
+  const sel = collectSelections();
+  setGalleryTab('current');
+  activeLoadingId = addLoadingSession(
+    sel.prompt || sel.text || sel.name || '',
+    currentModel?.name || '',
+    modelId,
+    {
+      mode: sel.mode || '',
+      resolution: sel.resolution || '',
+      ratio: sel.ratio || '',
+    }
+  );
+  refreshStudioGallery();
+  const submitBtn = $('pgSubmit');
+  if (submitBtn) submitBtn.disabled = true;
 
   const media = pollMediaForJobType(jobType);
 
@@ -491,7 +653,7 @@ async function runCreate() {
     if (resultUrl && !idBase) {
       setPreviewState('result', { url: resultUrl });
       recordHistory(resultUrl);
-      $('pgSubmit').disabled = false;
+      if (submitBtn) submitBtn.disabled = false;
       return;
     }
     if (!idBase) throw new Error('Không nhận được id_base từ API.');
@@ -502,7 +664,7 @@ async function runCreate() {
         recordHistory(resultUrl);
       }
       setResponse('Kết quả cuối', createEnv);
-      $('pgSubmit').disabled = false;
+      if (submitBtn) submitBtn.disabled = false;
       return;
     }
 
@@ -521,47 +683,85 @@ async function runCreate() {
       recordHistory(poll.resultUrl);
       setResponse('Kết quả cuối', poll);
     } else {
+      if (activeLoadingId) {
+        removeLoadingSession(activeLoadingId);
+        activeLoadingId = null;
+      }
       setPreviewState('empty');
-      $('pgError').hidden = false;
-      $('pgError').textContent = poll.timeout
-        ? 'Hết thời gian chờ — thử lại sau.'
-        : `Thất bại: ${poll.error || poll.status || 'unknown'}`;
+      showPgError(
+        poll.timeout
+          ? 'Hết thời gian chờ — thử lại sau.'
+          : `Thất bại: ${poll.error || poll.status || 'unknown'}`
+      );
+      refreshStudioGallery();
     }
   } catch (e) {
+    if (activeLoadingId) {
+      removeLoadingSession(activeLoadingId);
+      activeLoadingId = null;
+    }
     setPreviewState('empty');
     setResponse('Lỗi', { message: e.message, envelope: e.envelope });
-    $('pgError').hidden = false;
-    $('pgError').textContent = e.message || 'Lỗi kết nối API.';
+    showPgError(e.message || 'Lỗi kết nối API.');
+    refreshStudioGallery();
   } finally {
-    $('pgSubmit').disabled = false;
+    const submit = $('pgSubmit');
+    if (submit) submit.disabled = false;
   }
 }
 
 async function loadModels() {
-  $('pgModelLoading').hidden = false;
-  $('pgModelList').innerHTML = '';
+  const loading = $('pgModelLoading');
+  const list = $('pgModelList');
+  if (loading) loading.hidden = false;
+  if (list) list.innerHTML = '';
   try {
     const c = client();
     const env = await c.fetchModels(jobType);
     models = c.listModels(env).filter(isModelAvailable);
     renderProviderTabs();
     renderModelList();
-    if (models.length) selectModel(modelSlug(models[0]));
+    if (models.length) {
+      const preferred = preferredModelSlug
+        ? models.find((m) => modelSlug(m) === preferredModelSlug)
+        : null;
+      selectModel(modelSlug(preferred || models[0]));
+    }
     else {
-      $('pgError').hidden = false;
-      $('pgError').textContent = 'Không có model khả dụng cho loại này.';
+      showPgError('Không có model khả dụng cho loại này.');
     }
   } catch (e) {
-    $('pgError').hidden = false;
-    $('pgError').textContent = e.message || 'Không tải được danh sách model.';
+    showPgError(e.message || 'Không tải được danh sách model.');
   } finally {
-    $('pgModelLoading').hidden = true;
+    const loading = $('pgModelLoading');
+    if (loading) loading.hidden = true;
   }
 }
 
 function bindEvents() {
+  renderTypePanel();
+  syncTypeTrigger();
+  refreshStudioGallery();
+
+  $('pgTypeToggle')?.addEventListener('click', toggleTypePicker);
+  $('pgSideType')?.addEventListener('click', toggleTypePicker);
+  $('pgGoHome')?.addEventListener('click', () => navigate('/'));
+  $('pgGoBack')?.addEventListener('click', () => navigate('/'));
+
+  $('pgClearPrompt')?.addEventListener('click', () => {
+    if ($('pgPrompt')) $('pgPrompt').value = '';
+    if ($('pgText')) $('pgText').value = '';
+  });
+
+  document.addEventListener('history:updated', () => {
+    if (getGalleryTab() === 'history' || getGalleryTab() === 'library') refreshStudioGallery();
+  });
+
   $('pgModelToggle')?.addEventListener('click', toggleModelPicker);
-  $('pgModelBackdrop')?.addEventListener('click', closeModelPicker);
+  $('pgModelBackdrop')?.addEventListener('click', () => {
+    closeModelPicker();
+    closeTypePicker();
+  });
   $('pgClosePicker')?.addEventListener('click', (e) => {
     e.stopPropagation();
     closeModelPicker();
@@ -570,7 +770,14 @@ function bindEvents() {
   $('pgModelSearch')?.addEventListener('input', (e) => renderModelList(e.target.value));
   $('pgSubmit')?.addEventListener('click', runCreate);
   $('pgCopyUrl')?.addEventListener('click', () => {
-    navigator.clipboard?.writeText($('pgRequestUrl')?.textContent || '');
+    const url = $('pgRequestUrlSub')?.textContent || $('pgRequestUrl')?.textContent || '';
+    navigator.clipboard?.writeText(url);
+  });
+  $('pgCopyAuth')?.addEventListener('click', () => {
+    navigator.clipboard?.writeText($('pgAuthInfo')?.textContent || '');
+  });
+  $('pgCopyResponse')?.addEventListener('click', () => {
+    navigator.clipboard?.writeText($('pgResponse')?.textContent || '');
   });
   $('pgCopyBody')?.addEventListener('click', () => {
     navigator.clipboard?.writeText($('pgRequestBody')?.textContent || '');
@@ -585,47 +792,46 @@ function bindEvents() {
     saveSettings({ accessToken: token });
     document.dispatchEvent(new CustomEvent('settings:saved'));
     $('pgTokenBanner').hidden = true;
+    refreshAuthPanel();
     void loadModels();
   });
+
+  $('pgDomain')?.addEventListener('change', () => {
+    saveSettings({ domain: $('pgDomain')?.value.trim() });
+    refreshAuthPanel();
+  });
+  $('pgProjectId')?.addEventListener('change', () => {
+    saveSettings({ projectId: $('pgProjectId')?.value.trim() });
+    refreshAuthPanel();
+  });
+
+  $('pgGoMatrix')?.addEventListener('click', () => navigate('/matrix'));
 
   if (!escapeBound) {
     escapeBound = true;
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') closeModelPicker();
+      if (e.key === 'Escape') {
+        closeModelPicker();
+        closeTypePicker();
+      }
+    });
+  }
+
+  if (!clickBound) {
+    clickBound = true;
+    document.addEventListener('click', () => {
+      closeModelPicker();
+      closeTypePicker();
     });
   }
 }
 
 function getHtml() {
   const meta = typeMeta();
+  const createTitle = CREATE_TITLES[jobType] || 'Studio';
   return `
-    <div class="view-media-playground view-image-playground">
-      <header class="pg-topbar">
-        <div class="pg-topbar-left">
-          <span class="pg-topbar-badge">${meta.icon} ${escapeHtml(meta.label)}</span>
-          <div class="pg-model-select">
-            <button type="button" class="pg-model-trigger" id="pgModelToggle" aria-expanded="false" aria-haspopup="listbox" aria-controls="pgModelPicker">
-              <span id="pgModelName">Chọn model…</span>
-              <span class="pg-chevron" aria-hidden="true">▾</span>
-            </button>
-            <div id="pgModelBackdrop" class="pg-model-backdrop" aria-hidden="true"></div>
-            <div id="pgModelPicker" class="pg-model-dropdown panel" role="listbox" aria-label="Danh sách model">
-              <div class="pg-picker-head">
-                <input type="search" id="pgModelSearch" class="pg-search" placeholder="Tìm model theo tên, id…" />
-                <button type="button" class="icon-btn pg-close-picker" id="pgClosePicker" aria-label="Đóng">✕</button>
-              </div>
-              <div class="pg-provider-tabs" id="pgProviderTabs"></div>
-              <div id="pgModelLoading" class="loading" hidden>Đang tải model…</div>
-              <div id="pgModelList" class="pg-model-list"></div>
-            </div>
-          </div>
-        </div>
-        <div class="pg-topbar-right">
-          <button type="button" class="secondary pg-sm" id="pgGoSettings">Token API</button>
-        </div>
-      </header>
-
-      <div id="pgTokenBanner" class="banner warn token-panel" hidden>
+    <div class="view-media-playground studio-shell pg-shell page-shell">
+      <div id="pgTokenBanner" class="banner warn token-panel studio-token-banner" hidden>
         <form id="pgTokenForm" class="token-quick-form">
           <label class="field-block token-field">
             <span class="field-label">Mã token Gommo</span>
@@ -635,96 +841,105 @@ function getHtml() {
         </form>
       </div>
 
-      <div class="playground-layout">
-        <aside class="playground-left panel">
-          <div class="pg-model-head">
-            <div>
-              <p class="pg-model-slug" id="pgModelSlug">—</p>
-              <p class="pg-model-desc" id="pgModelDesc">Chọn model từ danh sách phía trên.</p>
-            </div>
-            <span class="pg-model-badge" id="pgModelBadge">—</span>
+      <div class="studio-workspace pg-workspace">
+        <aside class="studio-sidebar panel">
+          <header class="studio-side-head">
+            <button type="button" class="pg-back" id="pgGoBack" title="Trang chủ">←</button>
+            <h2 class="studio-side-title font-display">${escapeHtml(createTitle)}</h2>
+            <button type="button" class="studio-type-btn" id="pgSideType" title="Đổi loại">
+              <span id="pgTypeIcon">${meta.icon}</span>
+            </button>
+            <div id="pgTypePanel" class="pg-type-panel panel studio-type-panel" role="listbox"></div>
+          </header>
+
+          <div class="studio-side-scroll">
+          <div class="studio-mode-pills">
+            <button type="button" class="studio-pill active">Đơn</button>
+            <button type="button" class="studio-pill" disabled title="Sắp có">Auto Mode</button>
           </div>
 
-          <div id="pgNotice" class="notice" hidden></div>
-
-          <label id="pgPromptWrap" class="field-block">
-            <span class="field-label">${FIELD_LABELS.prompt} <em>*</em></span>
-            <textarea id="pgPrompt" rows="5" placeholder="Nhập mô tả / prompt…"></textarea>
-          </label>
-
-          <label id="pgTextWrap" class="field-block" hidden>
-            <span class="field-label">${FIELD_LABELS.text} <em>*</em></span>
-            <textarea id="pgText" rows="5" placeholder="Nhập văn bản cần đọc…"></textarea>
-          </label>
-
-          <label id="pgMusicNameWrap" class="field-block" hidden>
-            <span class="field-label">${FIELD_LABELS.musicName}</span>
-            <input type="text" id="pgMusicName" placeholder="Tên bài nhạc (tuỳ chọn)" />
-          </label>
-
-          <div id="pgParams"></div>
-          <div id="pgImages" class="pg-refs" hidden></div>
-          <div id="pgRefs" class="pg-refs" hidden></div>
-          <div id="pgSubjects" class="pg-refs" hidden></div>
-
-          <p class="pg-price-line">Chi phí ước tính: <strong id="pgPrice">—</strong></p>
-          <button type="button" class="primary pg-submit" id="pgSubmit">Tạo Request</button>
-          <p id="pgError" class="notice error" hidden></p>
-        </aside>
-
-        <section class="playground-center panel">
-          <div class="pg-preview-header">
-            <span class="pg-preview-tag">Preview</span>
-            <span id="pgPreviewProgress" class="pg-preview-status"></span>
-          </div>
-          <div class="pg-preview-stage">
-            <div id="pgPreviewEmpty" class="pg-preview-empty">
-              <span class="pg-preview-icon" id="pgPreviewIcon">${meta.icon}</span>
-              <p>Kết quả <strong>${escapeHtml(meta.label)}</strong> sẽ hiển thị ở đây sau khi bấm <strong>Tạo Request</strong></p>
-            </div>
-            <div id="pgPreviewLoading" class="pg-preview-loading" hidden>
-              <div class="pg-spinner"></div>
-              <p id="pgPreviewLoadingText">Đang xử lý…</p>
-            </div>
-            <div id="pgPreviewResult" class="pg-preview-result" hidden>
-              <img id="pgPreviewImg" alt="Kết quả" crossorigin="anonymous" hidden />
-              <video id="pgPreviewVideo" controls playsinline crossorigin="anonymous" hidden></video>
-              <audio id="pgPreviewAudio" controls crossorigin="anonymous" hidden></audio>
-              <p id="pgPreviewFile" class="pg-preview-file" hidden>
-                <a id="pgPreviewFileLink" class="btn-download" href="#" target="_blank" rel="noopener">Tải file kết quả</a>
-              </p>
-              <div class="pg-preview-actions">
-                <a id="pgResultLink" class="btn-download" href="#" target="_blank" rel="noopener">Mở tab mới</a>
-                <button type="button" class="btn-download secondary-style" id="pgDownload">Tải xuống</button>
+          <div class="studio-field studio-model-field">
+            <span class="studio-field-label">MODEL</span>
+            <div class="pg-model-select studio-model-select">
+              <button type="button" class="studio-model-trigger" id="pgModelToggle" aria-expanded="false">
+                <span id="pgModelName">Chọn model…</span>
+                <span class="pg-chevron">▾</span>
+              </button>
+              <div id="pgModelBackdrop" class="pg-model-backdrop"></div>
+              <div id="pgModelPicker" class="pg-model-dropdown panel" role="listbox">
+                <div class="pg-picker-head">
+                  <input type="search" id="pgModelSearch" class="pg-search" placeholder="Tìm model…" />
+                  <button type="button" class="icon-btn pg-close-picker" id="pgClosePicker">✕</button>
+                </div>
+                <div class="pg-provider-tabs" id="pgProviderTabs"></div>
+                <div id="pgModelLoading" class="loading" hidden>Đang tải…</div>
+                <div id="pgModelList" class="pg-model-list"></div>
               </div>
             </div>
           </div>
+
+          <div id="pgParams" class="studio-params"></div>
+          <div id="pgNotice" class="notice studio-notice" hidden></div>
+
+          <div class="studio-ref-zone" id="studioRefZone">
+            <p class="studio-ref-hint">ẢNH THAM CHIẾU — Nhấp / Kéo thả / Dán ảnh</p>
+            <div id="pgImages" class="pg-refs studio-refs" hidden></div>
+            <div id="pgRefs" class="pg-refs studio-refs" hidden></div>
+            <div id="pgSubjects" class="pg-refs studio-refs" hidden></div>
+          </div>
+
+          <div class="studio-prompt-block">
+            <div class="studio-prompt-head">
+              <span class="studio-field-label">MÔ TẢ</span>
+              <div class="studio-prompt-tools">
+                <button type="button" class="studio-icon-btn" id="pgClearPrompt" title="Xóa">🗑</button>
+              </div>
+            </div>
+            <label id="pgPromptWrap" class="field-block">
+              <textarea id="pgPrompt" class="studio-prompt-area" rows="5" placeholder="Mô tả nội dung bạn muốn tạo…"></textarea>
+            </label>
+            <label id="pgTextWrap" class="field-block" hidden>
+              <textarea id="pgText" class="studio-prompt-area" rows="5" placeholder="Văn bản cần đọc…"></textarea>
+            </label>
+            <label id="pgMusicNameWrap" class="field-block" hidden>
+              <input type="text" id="pgMusicName" placeholder="Tên bài nhạc" />
+            </label>
+          </div>
+
+          <details class="studio-advanced">
+            <summary>API &amp; xác thực</summary>
+            <div class="pg-auth-grid">
+              <label class="field-block"><span class="field-label">DOMAIN</span><input type="text" id="pgDomain" /></label>
+              <label class="field-block"><span class="field-label">PROJECT_ID</span><input type="text" id="pgProjectId" /></label>
+            </div>
+            <p class="pg-token-display"><code id="pgTokenDisplay">—</code></p>
+            <button type="button" class="secondary pg-sm" id="pgGoSettings">Token API</button>
+            <button type="button" class="secondary pg-sm" id="pgGoMatrix">Matrix</button>
+          </details>
+          </div>
+
+          <footer class="studio-side-footer">
+            <div class="studio-price-row">
+              <span class="studio-coin">◆</span>
+              <strong id="pgPrice">—</strong>
+            </div>
+            <button type="button" class="primary studio-submit" id="pgSubmit">⚡ ${escapeHtml(createTitle)}</button>
+            <p id="pgError" class="notice error" hidden></p>
+          </footer>
+        </aside>
+
+        <section class="studio-main panel">
+          <div class="studio-gallery-bar">
+            <div class="studio-gallery-tabs" role="tablist">
+              <button type="button" class="studio-gtab active" data-sg-tab="current" role="tab">Hiện tại</button>
+              <button type="button" class="studio-gtab" data-sg-tab="history" role="tab"><span id="sgHistCount">Lịch sử</span></button>
+              <button type="button" class="studio-gtab" data-sg-tab="library" role="tab">Thư viện</button>
+              <button type="button" class="studio-gtab" data-sg-tab="api" role="tab">API</button>
+            </div>
+            <div class="studio-gallery-tools" id="studioGalleryTools"></div>
+          </div>
+          <div class="studio-gallery-body" id="studioGalleryBody"></div>
         </section>
-
-        <aside class="playground-right">
-          <div class="panel pg-api-block">
-            <div class="pg-api-head">
-              <span class="pg-method">POST</span>
-              <code class="pg-url" id="pgRequestUrl">${API_BASE}/ai/jobs/${jobType}/…</code>
-              <button type="button" class="pg-copy" id="pgCopyUrl" title="Copy URL">⧉</button>
-            </div>
-            <details open class="pg-details">
-              <summary>Auth &amp; Body</summary>
-              <pre class="log compact" id="pgAuthInfo">{}</pre>
-              <div class="pg-api-head sub">
-                <span>Body</span>
-                <button type="button" class="pg-copy" id="pgCopyBody">Copy</button>
-              </div>
-              <pre class="log compact" id="pgRequestBody">{}</pre>
-            </details>
-          </div>
-          <div class="panel pg-api-block">
-            <div class="pg-api-head">
-              <strong class="font-display">Response</strong>
-            </div>
-            <pre class="log pg-response" id="pgResponse">// Chưa có response</pre>
-          </div>
-        </aside>
       </div>
     </div>
   `;
@@ -760,15 +975,19 @@ function renderTypePicker(main) {
   });
 }
 
-/** @param {{ main: HTMLElement, params?: { type?: string } }} ctx */
-export function renderMediaPlayground({ main, params = {} }) {
-  const type = params.type;
-  if (!type || !PLAYGROUND_TYPES.has(type)) {
-    renderTypePicker(main);
+/** @param {{ main: HTMLElement, params?: { type?: string }, query?: { model?: string } }} ctx */
+export function renderMediaPlayground({ main, params = {}, query = {} }) {
+  const type = params.type || 'image';
+  preferredModelSlug = String(query.model || '').trim();
+  if (!PLAYGROUND_TYPES.has(type)) {
+    navigate('/create/image');
     return;
   }
 
   jobType = type;
+  setGalleryTab('current');
+  resetSession();
+  activeLoadingId = null;
   models = [];
   currentModel = null;
   schema = null;
@@ -776,10 +995,12 @@ export function renderMediaPlayground({ main, params = {} }) {
 
   main.innerHTML = getHtml();
   bindEvents();
-  $('pgGoSettings')?.addEventListener('click', () => navigate('/settings'));
+  refreshAuthPanel();
+  setGalleryReuseHandler(applyHistoryEntry);
+  $('pgTypePanel')?.addEventListener('click', (e) => e.stopPropagation());
 
-  setPreviewState('empty');
   setRequestPreview('model_id', { domain: loadSettings().domain, project_id: loadSettings().projectId });
+  refreshStudioGallery();
 
   if (!hasToken()) {
     $('pgTokenBanner').hidden = false;

@@ -6,8 +6,8 @@
   padding: 0;
 }
 
-.app-main.is-wide:not(.is-landing) {
-  padding: 1rem 1.75rem 2rem;
+body.shell-active .app-main.is-wide:not(.is-landing) {
+  padding: 0;
 }
 
 /* Gradient tiêu đề — trắng → xanh nhạt như ảnh mẫu */
@@ -63,9 +63,13 @@
 /* —— Landing dashboard —— */
 .landing {
   padding-bottom: 0;
-  min-height: calc(100vh - var(--header-h));
+  min-height: auto;
   display: flex;
   flex-direction: column;
+}
+
+.page-toolbar-stats {
+  margin-bottom: 1.25rem;
 }
 
 .landing-hero {
@@ -1078,6 +1082,186 @@
   margin-top: 1.5rem;
   padding-top: 1rem;
   border-top: 1px solid var(--border);
+}
+
+/* —— Model Matrix —— */
+.view-matrix {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 0 1.25rem 2.5rem;
+}
+
+.matrix-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.5rem 0 1rem;
+}
+
+.matrix-lead {
+  margin: 0.35rem 0 0;
+  color: var(--muted);
+  font-size: 0.92rem;
+  max-width: 520px;
+}
+
+.matrix-hero-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.matrix-stats-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.matrix-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.65rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: rgba(10, 10, 18, 0.6);
+  min-width: 88px;
+}
+
+.matrix-stat-val {
+  font-size: 1.35rem;
+  font-weight: 800;
+}
+
+.matrix-stat-lbl {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.matrix-total-line {
+  margin: 0 0 1rem;
+  font-size: 0.88rem;
+  color: var(--muted);
+}
+
+.matrix-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.85rem !important;
+  margin-bottom: 1rem;
+}
+
+.matrix-select,
+.matrix-search {
+  padding: 0.45rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--ink-900);
+  color: var(--text);
+  font: inherit;
+  font-size: 0.85rem;
+}
+
+.matrix-search {
+  flex: 1;
+  min-width: 160px;
+}
+
+.matrix-table-wrap {
+  overflow-x: auto;
+  padding: 0 !important;
+  margin-bottom: 1rem;
+}
+
+.matrix-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.82rem;
+}
+
+.matrix-table th,
+.matrix-table td {
+  padding: 0.65rem 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  vertical-align: top;
+}
+
+.matrix-table th {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted-soft);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.matrix-slug {
+  display: block;
+  font-size: 0.7rem;
+  color: var(--gospel-violet);
+  margin-top: 0.2rem;
+}
+
+.matrix-fields {
+  max-width: 200px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.matrix-type-tag {
+  white-space: nowrap;
+}
+
+.matrix-prov {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--brand-cyan);
+}
+
+.matrix-status.ok {
+  color: var(--ok);
+}
+
+.matrix-status.off {
+  color: var(--warn);
+}
+
+.matrix-dry.ok {
+  color: var(--ok);
+  font-size: 0.78rem;
+}
+
+.matrix-dry.fail {
+  color: var(--err);
+  font-size: 0.78rem;
+}
+
+.matrix-actions {
+  white-space: nowrap;
+  display: flex;
+  gap: 0.35rem;
+}
+
+.matrix-log-panel {
+  padding: 0.85rem !important;
+}
+
+.matrix-log-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.matrix-log {
+  max-height: 280px;
+  overflow: auto;
+  margin: 0;
+  font-size: 0.75rem;
 }
 
 @media (max-width: 768px) {

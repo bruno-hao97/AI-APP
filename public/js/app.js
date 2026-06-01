@@ -5,14 +5,15 @@ import { renderSettings, refreshSidebarStatus } from './views/settings.js';
 import { renderHistory } from './views/history.js';
 import { renderFeatures } from './views/features.js';
 import { renderModels } from './views/models.js';
+import { renderModelMatrix } from './views/model-matrix.js';
 import { renderSupport } from './views/support.js';
 import { renderPrivacy } from './views/privacy.js';
 import { renderDocs } from './views/docs.js';
 import { initFeatureMenu } from './feature-menu.js';
 import { JOB_TYPES } from './ui-labels.js';
 
-function renderCreate({ main, params }) {
-  renderMediaPlayground({ main, params });
+function renderCreate({ main, params, query }) {
+  renderMediaPlayground({ main, params, query });
   const saved = sessionStorage.getItem('hero_prompt');
   if (saved && params.type === 'image') {
     setTimeout(() => {
@@ -26,7 +27,7 @@ function renderCreate({ main, params }) {
 function bindShell() {
   document.getElementById('headerStart')?.addEventListener('click', (e) => {
     e.preventDefault();
-    navigate('/create/image');
+    navigate('/create');
   });
 
   document.getElementById('topbarHome')?.addEventListener('click', (e) => {
@@ -46,6 +47,7 @@ route('', renderDashboard);
 route('/', renderDashboard);
 route('features', renderFeatures);
 route('models', renderModels);
+route('matrix', renderModelMatrix);
 route('support', renderSupport);
 route('privacy', renderPrivacy);
 route('docs', renderDocs);

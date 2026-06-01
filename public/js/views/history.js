@@ -1,6 +1,7 @@
 import { listHistory, removeHistoryEntry, clearHistory, countHistoryGrouped, isMediaUrl } from '../history-store.js';
 import { JOB_TYPES } from '../ui-labels.js';
 import { navigate } from '../router.js';
+import { buildPageShell, bindPageShell, buildQuickNav, defaultPageActions } from '../page-shell.js';
 
 function escapeHtml(s) {
   return String(s ?? '')
@@ -61,6 +62,21 @@ function renderCard(entry) {
     </article>`;
 }
 
+function buildHistTabs(activeType, counts, total) {
+  return `
+    <div class="page-segment-tabs" role="tablist">
+      <button type="button" class="page-sub-link${!activeType ? ' active' : ''}" data-hist-tab="" role="tab">
+        Tất cả <span class="hist-count">${total}</span>
+      </button>
+      ${JOB_TYPES.map(
+        (t) => `
+      <button type="button" class="page-sub-link${activeType === t.value ? ' active' : ''}" data-hist-tab="${t.value}" role="tab">
+        ${t.icon} ${t.label} <span class="hist-count">${counts[t.value] || 0}</span>
+      </button>`
+      ).join('')}
+    </div>`;
+}
+
 function bindHistoryEvents(main, activeType) {
   main.querySelectorAll('[data-hist-tab]').forEach((tab) => {
     tab.addEventListener('click', () => {
@@ -95,45 +111,39 @@ export function renderHistory({ main, params }) {
   const counts = countHistoryGrouped();
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   const entries = listHistory(activeType);
+  const histPath = activeType ? `/history/${activeType}` : '/history';
 
-  main.innerHTML = `
-    <div class="view-history">
-      <header class="page-header">
-        <div>
-          <p class="page-kicker">Thư viện</p>
-          <h1 class="page-title font-display">Lịch sử tạo</h1>
-          <p class="page-lead">Kết quả được lưu tự động sau mỗi lần gen thành công — phân theo loại nội dung.</p>
-        </div>
-        <div class="hist-header-actions">
-          ${activeType ? `<button type="button" class="secondary pg-sm" id="histClearType">Xóa tab này</button>` : ''}
-          ${total > 0 ? `<button type="button" class="secondary pg-sm" id="histClearAll">Xóa tất cả</button>` : ''}
-        </div>
-      </header>
+  const clearActions =
+    activeType || total > 0
+      ? `${activeType ? '<button type="button" class="secondary pg-sm" id="histClearType">Xóa tab này</button>' : ''}${total > 0 ? '<button type="button" class="secondary pg-sm" id="histClearAll">Xóa tất cả</button>' : ''}`
+      : '';
 
-      <div class="hist-tabs" role="tablist">
-        <button type="button" class="pg-tab${!activeType ? ' active' : ''}" data-hist-tab="">
-          Tất cả <span class="hist-count">${total}</span>
-        </button>
-        ${JOB_TYPES.map(
-          (t) => `
-        <button type="button" class="pg-tab${activeType === t.value ? ' active' : ''}" data-hist-tab="${t.value}">
-          ${t.icon} ${t.label} <span class="hist-count">${counts[t.value] || 0}</span>
-        </button>`
-        ).join('')}
+  const content = `
+    <div class="page-body-inner is-wide">
+      <div class="view-history">
+        ${
+          entries.length === 0
+            ? `
+        <div class="hist-empty panel">
+          <span class="hist-empty-icon">📭</span>
+          <p>Chưa có bản ghi${activeType ? ` cho loại <strong>${escapeHtml(JOB_TYPES.find((t) => t.value === activeType)?.label)}</strong>` : ''}.</p>
+          <p class="hint">Tạo nội dung từ Studio — kết quả sẽ xuất hiện ở đây.</p>
+        </div>`
+            : `<div class="hist-grid">${entries.map(renderCard).join('')}</div>`
+        }
       </div>
+    </div>`;
 
-      ${
-        entries.length === 0
-          ? `
-      <div class="hist-empty panel">
-        <span class="hist-empty-icon">📭</span>
-        <p>Chưa có bản ghi${activeType ? ` cho loại <strong>${escapeHtml(JOB_TYPES.find((t) => t.value === activeType)?.label)}</strong>` : ''}.</p>
-        <p class="hint">Tạo nội dung từ Studio — kết quả sẽ xuất hiện ở đây.</p>
-      </div>`
-          : `<div class="hist-grid">${entries.map(renderCard).join('')}</div>`
-      }
-    </div>
-  `;
+  main.innerHTML = buildPageShell({
+    kicker: 'Thư viện',
+    title: 'Lịch sử tạo',
+    lead: 'Kết quả được lưu tự động sau mỗi lần gen thành công.',
+    backTo: '/',
+    subBar: `${buildQuickNav(histPath)}${buildHistTabs(activeType, counts, total)}`,
+    actions: defaultPageActions({ extra: clearActions }),
+    content,
+  });
 
+  bindPageShell(main);
   bindHistoryEvents(main, activeType);
 }

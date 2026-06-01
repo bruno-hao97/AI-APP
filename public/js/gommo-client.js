@@ -76,6 +76,46 @@ export class GommoClient {
     });
   }
 
+  /**
+   * POST /ai/upload/image — multipart (giống 79.ai)
+   * @param {File|Blob} file
+   */
+  async uploadImage(file, { fileName } = {}) {
+    if (!this.accessToken) throw new Error('Chưa có access token.');
+    const name = fileName || file.name || 'image.png';
+    const form = new FormData();
+    form.append('access_token', this.accessToken);
+    form.append('domain', this.domain);
+    form.append('project_id', this.projectId);
+    form.append('file', file, name);
+    form.append('file_name', name);
+    form.append('size', String(file.size ?? 0));
+
+    const res = await fetch(`${BASE_URL}/ai/upload/image`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${this.accessToken}` },
+      body: form,
+    });
+    const envelope = await this.parse(res);
+    if (!res.ok || envelope.success === false) {
+      const err = new Error(envelope.message || `Upload HTTP ${res.status}`);
+      err.status = res.status;
+      err.envelope = envelope;
+      throw err;
+    }
+    const url =
+      envelope?.data?.url ||
+      envelope?.data?.result_url ||
+      envelope?.data?.image_url ||
+      envelope?.url;
+    if (!url) {
+      const err = new Error('Upload thành công nhưng không có URL trong response.');
+      err.envelope = envelope;
+      throw err;
+    }
+    return { url, envelope };
+  }
+
   /** POST /ai/models — response { data: Model[] } */
   async fetchModels(type) {
     const q = `type=${encodeURIComponent(type)}&domain=${encodeURIComponent(this.domain)}`;

@@ -53,6 +53,8 @@ export function dispatch() {
   if (!main || !match) return;
 
   document.body.classList.toggle('is-landing-page', segments.length === 0);
+  document.body.classList.toggle('shell-active', true);
+  document.body.classList.toggle('pg-active', segments[0] === 'create');
   document.body.dataset.page = segments[0] || 'home';
 
   document.querySelectorAll('[data-topnav]').forEach((el) => {
@@ -65,10 +67,20 @@ export function dispatch() {
   main.classList.toggle(
     'is-wide',
     segments.length === 0 ||
-      ['create', 'history', 'models', 'features', 'docs', 'support', 'privacy'].includes(segments[0])
+      ['create', 'history', 'models', 'matrix', 'features', 'docs', 'support', 'privacy'].includes(segments[0])
   );
 
-  match.handler({ main, params: match.params, query, segments });
+  try {
+    match.handler({ main, params: match.params, query, segments });
+  } catch (err) {
+    console.error('[router]', segments.join('/'), err);
+    main.innerHTML = `
+      <div class="panel notice error" style="margin:1.5rem">
+        <strong>Lỗi render trang</strong>
+        <p>${String(err?.message || err)}</p>
+        <p class="hint">Mở DevTools (F12) → Console để xem chi tiết. Thử Ctrl+F5 tải lại.</p>
+      </div>`;
+  }
   updateFeatureMenuRoute(segments);
 }
 

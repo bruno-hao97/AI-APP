@@ -1,5 +1,6 @@
 import { navigate } from '../router.js';
 import { FEATURE_CATEGORIES, FEATURE_STATS, SITE } from '../site-content.js';
+import { buildPageShell, bindPageShell, buildQuickNav, defaultPageActions } from '../page-shell.js';
 
 function renderFeatureItem(item) {
   const path = item.path || '/docs';
@@ -32,16 +33,10 @@ function renderCategory(cat) {
 }
 
 export function renderFeatures({ main }) {
-  main.innerHTML = `
-    <div class="view-page view-features">
-      <header class="feat-hero">
-        <p class="feat-hero-kicker">Nền tảng</p>
-        <h1 class="feat-hero-title font-display">Tính năng Nền tảng</h1>
-        <p class="feat-hero-lead">
-          ${SITE.tagline} — tích hợp ${SITE.api}. Một workspace cho video, hình ảnh,
-          giọng nói, nhạc và avatar với catalog model thống nhất.
-        </p>
-        <div class="feat-stats-row">
+  const content = `
+    <div class="page-body-inner is-wide">
+      <div class="view-page view-features">
+        <div class="feat-stats-row page-toolbar-stats">
           ${FEATURE_STATS.map(
             (s) => `
             <div class="feat-stat">
@@ -50,26 +45,36 @@ export function renderFeatures({ main }) {
             </div>`
           ).join('')}
         </div>
-      </header>
+        <p class="page-lead">${SITE.tagline} — tích hợp ${SITE.api}. Một workspace cho video, hình ảnh, giọng nói, nhạc và avatar.</p>
 
-      <div class="feat-sections">
-        ${FEATURE_CATEGORIES.map(renderCategory).join('')}
-      </div>
-
-      <section class="feat-cta">
-        <div class="feat-cta-inner">
-          <span class="feat-cta-icon" aria-hidden="true">🚀</span>
-          <h3 class="font-display">Sẵn sàng bắt đầu?</h3>
-          <p>Kết nối token API và mở Studio — tạo nội dung trong vài phút.</p>
-          <div class="feat-cta-actions">
-            <button type="button" class="feat-cta-primary" data-go="/create/image">Bắt đầu miễn phí</button>
-            <button type="button" class="feat-cta-secondary" data-go="/models">Xem Models</button>
-          </div>
+        <div class="feat-sections">
+          ${FEATURE_CATEGORIES.map(renderCategory).join('')}
         </div>
-      </section>
-    </div>
-  `;
 
+        <section class="feat-cta">
+          <div class="feat-cta-inner">
+            <span class="feat-cta-icon" aria-hidden="true">🚀</span>
+            <h3 class="font-display">Sẵn sàng bắt đầu?</h3>
+            <p>Kết nối token API và mở Studio — tạo nội dung trong vài phút.</p>
+            <div class="feat-cta-actions">
+              <button type="button" class="feat-cta-primary" data-go="/create">Bắt đầu miễn phí</button>
+              <button type="button" class="feat-cta-secondary" data-go="/models">Xem Models</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </div>`;
+
+  main.innerHTML = buildPageShell({
+    kicker: 'Nền tảng',
+    title: 'Tính năng',
+    backTo: '/',
+    subBar: buildQuickNav('/features'),
+    actions: defaultPageActions(),
+    content,
+  });
+
+  bindPageShell(main);
   main.querySelectorAll('[data-go]').forEach((btn) => {
     btn.addEventListener('click', () => navigate(btn.dataset.go));
   });
